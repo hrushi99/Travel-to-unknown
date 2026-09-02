@@ -1,1 +1,93 @@
+# .gitlab-ci.yml
+# authentication project -- Maven build (Java 8, WAR) + HP Fortify SAST on real .java source
 
+stages:
+  - build
+  - sast
+
+# ──────────────────────────────────────────────────────────────
+# BUILD STAGE
+# ──────────────────────────────────────────────────────────────
+build:maven:
+  stage: build
+  image: registry.redhat.io/openjdk/openjdk-8-rhel8:latest
+  tags:
+    - common_runner
+
+  variables:
+    MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+
+  script:
+    - java -version
+    - mvn -version
+    - mvn -s settings.xml clean package -DskipTests
+
+  artifacts:
+    paths:
+      - target/*.war
+    expire_in: 1 day
+    when: always
+
+  cache:
+    key: "${CI_PROJECT_NAME}"
+    paths:
+      - .m2/repository
+
+# ──────────────────────────────────────────────────────────────
+# SAST STAGE -- HP Fortify on real .java source (not the built WAR)
+# ──────────────────────────────────────────────────────────────
+sast:fortify:
+  stage: sast
+  image: artifactory.jfrog.sbi:443/dso-base-image/ubi9/ubi9-java21-fortify-24.4:2.0
+  tags:
+    - common_runner
+  allow_failure: true
+  needs:
+    - job: build:maven
+      artifacts: false   # sast scans source, doesn't need the WAR itself
+
+  variables:
+    FORTIFY_BUILD_ID: "$CI_PROJECT_PATH_SLUG"
+    FORTIFY_MEM:      "4G"
+    SOURCE_INCLUDE:   "./src/main/java/**/*.java"
+    SOURCE_EXCLUDE:   "./src/test/**/*"
+
+  script:
+    - java -version
+    - test -d src/main/java || { echo "ERROR: src/main/java not found -- nothing to scan"; exit 1; }
+
+    - sourceanalyzer -b "$FORTIFY_BUILD_ID" -clean
+
+    - |
+      sourceanalyzer -b "$FORTIFY_BUILD_ID" -Xmx${FORTIFY_MEM} -source 8 -verbose \
+        "$SOURCE_INCLUDE" -exclude "$SOURCE_EXCLUDE" | tee translate.log
+      TRANSLATE_RC=${PIPESTATUS[0]}
+      if [ "$TRANSLATE_RC" -ne 0 ]; then
+        echo "ERROR: sourceanalyzer translation failed (exit $TRANSLATE_RC)."
+        exit 1
+      fi
+
+    - |
+      FILE_COUNT=$(sourceanalyzer -b "$FORTIFY_BUILD_ID" -show-files 2>/dev/null | grep -c . | tr -d '[:space:]')
+      FILE_COUNT=${FILE_COUNT:-0}
+      echo "Files picked up: $FILE_COUNT"
+      if [ "$FILE_COUNT" -eq 0 ]; then
+        echo "ERROR: Fortify translated 0 files. Scan is INVALID."
+        exit 1
+      fi
+
+    - sourceanalyzer -b "$FORTIFY_BUILD_ID" -scan -Xmx${FORTIFY_MEM} -f "${CI_PROJECT_PATH_SLUG}.fpr"
+
+    - BIRTReportGenerator -template "Developer Workbook" \
+        -source "${CI_PROJECT_PATH_SLUG}.fpr" \
+        -format PDF \
+        -output "${CI_PROJECT_PATH_SLUG}_report.pdf" \
+        -Xmx${FORTIFY_MEM}
+
+  artifacts:
+    paths:
+      - "${CI_PROJECT_PATH_SLUG}.fpr"
+      - "${CI_PROJECT_PATH_SLUG}_report.pdf"
+      - translate.log
+    expire_in: 1 day
+    when: always
