@@ -1,93 +1,82 @@
-# .gitlab-ci.yml
-# authentication project -- Maven build (Java 8, WAR) + HP Fortify SAST on real .java source
+Running with gitlab-runner 19.0.2 (02fcb2d7)
+  on Test_runner_dr_29 FHZN0T8c-, system ID: s_37748334dac5
+Resolving secrets
+Preparing the "docker" executor
+00:09
+Using Docker executor with image artifactory.jfrog.sbi:443/itepaypg-sbiepay2-docker-virtual/openjdk/openjdk-8-rhel8:latest ...
+Using helper image:  artifactory.jfrog.sbi:443/dso-base-image/gitlab/gitlab-runner-helper:x86_64-v19.0.2  (overridden, default would be  registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-v19.0.2 )
+Using effective pull policy of [if-not-present] for container artifactory.jfrog.sbi:443/dso-base-image/gitlab/gitlab-runner-helper:x86_64-v19.0.2
+Using locally found image version due to "if-not-present" pull policy
+Using docker image sha256:367b33510658f246aa5bff686272dde897576eec01c436f0a0e4ce31a594815e for artifactory.jfrog.sbi:443/dso-base-image/gitlab/gitlab-runner-helper:x86_64-v19.0.2 with digest artifactory.jfrog.sbi:443/dso-base-image/gitlab/gitlab-runner-helper@sha256:660e3634504b66e0ae3ad165131d9fc3fd05b2ac31ebf332b7fa8d93f4ed9682 ...
+Using helper image:  artifactory.jfrog.sbi:443/dso-base-image/gitlab/gitlab-runner-helper:x86_64-v19.0.2  (overridden, default would be  registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-v19.0.2 )
+Using effective pull policy of [if-not-present] for container artifactory.jfrog.sbi:443/dso-base-image/gitlab/gitlab-runner-helper:x86_64-v19.0.2
+Using docker image sha256:367b33510658f246aa5bff686272dde897576eec01c436f0a0e4ce31a594815e for artifactory.jfrog.sbi:443/dso-base-image/gitlab/gitlab-runner-helper:x86_64-v19.0.2 with digest artifactory.jfrog.sbi:443/dso-base-image/gitlab/gitlab-runner-helper@sha256:660e3634504b66e0ae3ad165131d9fc3fd05b2ac31ebf332b7fa8d93f4ed9682 ...
+Using effective pull policy of [if-not-present] for container artifactory.jfrog.sbi:443/itepaypg-sbiepay2-docker-virtual/openjdk/openjdk-8-rhel8:latest
+Authenticating with credentials from $DOCKER_AUTH_CONFIG
+Pulling docker image artifactory.jfrog.sbi:443/itepaypg-sbiepay2-docker-virtual/openjdk/openjdk-8-rhel8:latest ...
+Using docker image sha256:c163906bb0459972e2a406533ee2d7e7a20eeaf0b91d88da237d08e445d79daa for artifactory.jfrog.sbi:443/itepaypg-sbiepay2-docker-virtual/openjdk/openjdk-8-rhel8:latest with digest artifactory.jfrog.sbi:443/itepaypg-sbiepay2-docker-virtual/openjdk/openjdk-8-rhel8@sha256:cff25a1b00f5b16a6ce37b58b84b2a7900f7daae13a85983b15dd6361992f716 ...
+Preparing environment
+00:01
+Using helper image:  artifactory.jfrog.sbi:443/dso-base-image/gitlab/gitlab-runner-helper:x86_64-v19.0.2  (overridden, default would be  registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-v19.0.2 )
+Using effective pull policy of [if-not-present] for container artifactory.jfrog.sbi:443/dso-base-image/gitlab/gitlab-runner-helper:x86_64-v19.0.2
+Using docker image sha256:367b33510658f246aa5bff686272dde897576eec01c436f0a0e4ce31a594815e for artifactory.jfrog.sbi:443/dso-base-image/gitlab/gitlab-runner-helper:x86_64-v19.0.2 with digest artifactory.jfrog.sbi:443/dso-base-image/gitlab/gitlab-runner-helper@sha256:660e3634504b66e0ae3ad165131d9fc3fd05b2ac31ebf332b7fa8d93f4ed9682 ...
+Using effective pull policy of [if-not-present] for container sha256:367b33510658f246aa5bff686272dde897576eec01c436f0a0e4ce31a594815e
+Running on runner-fhzn0t8c--project-3381-concurrent-0 via DRPE3DSOPGRunners9App09...
+Getting source from Git repository
+00:02
+Gitaly correlation ID: 01M1GNNKGZ3B4P16X6EANNKYBQ
+Fetching changes with git depth set to 20...
+Initialized empty Git repository in /builds/itepaypg-sbiepay2/sbiepay-1.0/application/backend/authentication/.git/
+Created fresh repository.
+Checking out ebf9cd26 as detached HEAD (ref is main)...
+Skipping Git submodules setup
+Restoring cache
+00:01
+Checking cache for authentication-protected...
+No URL provided, cache will not be downloaded from shared cache server. Instead a local version of cache will be extracted. 
+WARNING: Cache file does not exist                 
+Failed to extract cache
+Executing "step_script" stage of the job script
+00:04
+Using effective pull policy of [if-not-present] for container artifactory.jfrog.sbi:443/itepaypg-sbiepay2-docker-virtual/openjdk/openjdk-8-rhel8:latest
+Using docker image sha256:c163906bb0459972e2a406533ee2d7e7a20eeaf0b91d88da237d08e445d79daa for artifactory.jfrog.sbi:443/itepaypg-sbiepay2-docker-virtual/openjdk/openjdk-8-rhel8:latest with digest artifactory.jfrog.sbi:443/itepaypg-sbiepay2-docker-virtual/openjdk/openjdk-8-rhel8@sha256:cff25a1b00f5b16a6ce37b58b84b2a7900f7daae13a85983b15dd6361992f716 ...
+$ java -version
+openjdk version "1.8.0_262"
+OpenJDK Runtime Environment (build 1.8.0_262-b10)
+OpenJDK 64-Bit Server VM (build 25.262-b10, mixed mode)
+$ mvn --version
+Apache Maven 3.6.2 (Red Hat 3.6.2-4)
+Maven home: /usr/share/maven
+Java version: 1.8.0_262, vendor: Oracle Corporation, runtime: /usr/lib/jvm/java-1.8.0-openjdk-1.8.0.262.b10-0.el8_2.x86_64/jre
+Default locale: en_US, platform encoding: ANSI_X3.4-1968
+OS name: "linux", version: "5.14.0-687.20.1.el9_8.x86_64", arch: "amd64", family: "unix"
+$ mvn -s settings.xml clean package -DskipTests
+[WARNING] 
+[WARNING] Some problems were encountered while building the effective settings
+[WARNING] Unrecognised tag: 'blocked' (position: START_TAG seen ...</url>\r\n      <blocked>... @176:16)  @ /builds/itepaypg-sbiepay2/sbiepay-1.0/application/backend/authentication/settings.xml, line 176, column 16
+[WARNING] 
+[INFO] Scanning for projects...
+Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-parent/2.7.2/spring-boot-starter-parent-2.7.2.pom
+[ERROR] [ERROR] Some problems were encountered while processing the POMs:
+[FATAL] Non-resolvable parent POM for com.sbi.epay.api_authentication:authenticationAPI:0.0.1: Could not transfer artifact org.springframework.boot:spring-boot-starter-parent:pom:2.7.2 from/to central (https://repo.maven.apache.org/maven2): Transfer failed for https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-parent/2.7.2/spring-boot-starter-parent-2.7.2.pom ProxyInfo{host='swg.sbi.co.in', userName='null', port=9090, type='https', nonProxyHosts='null'} and 'parent.relativePath' points at no local POM @ line 5, column 10
+ @ 
+[ERROR] The build could not read 1 project -> [Help 1]
+[ERROR]   
+[ERROR]   The project com.sbi.epay.api_authentication:authenticationAPI:0.0.1 (/builds/itepaypg-sbiepay2/sbiepay-1.0/application/backend/authentication/pom.xml) has 1 error
+[ERROR]     Non-resolvable parent POM for com.sbi.epay.api_authentication:authenticationAPI:0.0.1: Could not transfer artifact org.springframework.boot:spring-boot-starter-parent:pom:2.7.2 from/to central (https://repo.maven.apache.org/maven2): Transfer failed for https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-parent/2.7.2/spring-boot-starter-parent-2.7.2.pom ProxyInfo{host='swg.sbi.co.in', userName='null', port=9090, type='https', nonProxyHosts='null'} and 'parent.relativePath' points at no local POM @ line 5, column 10: sun.security.validator.ValidatorException: PKIX path building failed: sun.security.provider.certpath.SunCertPathBuilderException: unable to find valid certification path to requested target -> [Help 2]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/ProjectBuildingException
+[ERROR] [Help 2] http://cwiki.apache.org/confluence/display/MAVEN/UnresolvableModelException
+Uploading artifacts for failed job
+00:01
+Uploading artifacts...
+WARNING: target/*.war: no matching files. Ensure that the artifact path is relative to the working directory (/builds/itepaypg-sbiepay2/sbiepay-1.0/application/backend/authentication) 
+ERROR: No files to upload                          
+Cleaning up project directory and file based variables
+00:01
+ERROR: Job failed: exit code 1
 
-stages:
-  - build
-  - sast
-
-# ──────────────────────────────────────────────────────────────
-# BUILD STAGE
-# ──────────────────────────────────────────────────────────────
-build:maven:
-  stage: build
-  image: registry.redhat.io/openjdk/openjdk-8-rhel8:latest
-  tags:
-    - common_runner
-
-  variables:
-    MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
-
-  script:
-    - java -version
-    - mvn -version
-    - mvn -s settings.xml clean package -DskipTests
-
-  artifacts:
-    paths:
-      - target/*.war
-    expire_in: 1 day
-    when: always
-
-  cache:
-    key: "${CI_PROJECT_NAME}"
-    paths:
-      - .m2/repository
-
-# ──────────────────────────────────────────────────────────────
-# SAST STAGE -- HP Fortify on real .java source (not the built WAR)
-# ──────────────────────────────────────────────────────────────
-sast:fortify:
-  stage: sast
-  image: artifactory.jfrog.sbi:443/dso-base-image/ubi9/ubi9-java21-fortify-24.4:2.0
-  tags:
-    - common_runner
-  allow_failure: true
-  needs:
-    - job: build:maven
-      artifacts: false   # sast scans source, doesn't need the WAR itself
-
-  variables:
-    FORTIFY_BUILD_ID: "$CI_PROJECT_PATH_SLUG"
-    FORTIFY_MEM:      "4G"
-    SOURCE_INCLUDE:   "./src/main/java/**/*.java"
-    SOURCE_EXCLUDE:   "./src/test/**/*"
-
-  script:
-    - java -version
-    - test -d src/main/java || { echo "ERROR: src/main/java not found -- nothing to scan"; exit 1; }
-
-    - sourceanalyzer -b "$FORTIFY_BUILD_ID" -clean
-
-    - |
-      sourceanalyzer -b "$FORTIFY_BUILD_ID" -Xmx${FORTIFY_MEM} -source 8 -verbose \
-        "$SOURCE_INCLUDE" -exclude "$SOURCE_EXCLUDE" | tee translate.log
-      TRANSLATE_RC=${PIPESTATUS[0]}
-      if [ "$TRANSLATE_RC" -ne 0 ]; then
-        echo "ERROR: sourceanalyzer translation failed (exit $TRANSLATE_RC)."
-        exit 1
-      fi
-
-    - |
-      FILE_COUNT=$(sourceanalyzer -b "$FORTIFY_BUILD_ID" -show-files 2>/dev/null | grep -c . | tr -d '[:space:]')
-      FILE_COUNT=${FILE_COUNT:-0}
-      echo "Files picked up: $FILE_COUNT"
-      if [ "$FILE_COUNT" -eq 0 ]; then
-        echo "ERROR: Fortify translated 0 files. Scan is INVALID."
-        exit 1
-      fi
-
-    - sourceanalyzer -b "$FORTIFY_BUILD_ID" -scan -Xmx${FORTIFY_MEM} -f "${CI_PROJECT_PATH_SLUG}.fpr"
-
-    - BIRTReportGenerator -template "Developer Workbook" \
-        -source "${CI_PROJECT_PATH_SLUG}.fpr" \
-        -format PDF \
-        -output "${CI_PROJECT_PATH_SLUG}_report.pdf" \
-        -Xmx${FORTIFY_MEM}
-
-  artifacts:
-    paths:
-      - "${CI_PROJECT_PATH_SLUG}.fpr"
-      - "${CI_PROJECT_PATH_SLUG}_report.pdf"
-      - translate.log
-    expire_in: 1 day
-    when: always
