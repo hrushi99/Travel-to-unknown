@@ -1,28 +1,50 @@
-Red Hat Advanced Cluster Security
+You can send the architect a concise note that explains what you have understood, what is already in place, and specifically asks for confirmation on the next POC steps.
 
-Red Hat Advanced Cluster Security provides Kubernetes-native runtime threat detection and behavioral monitoring to protect active container workloads. The Collector component runs as a DaemonSet on every node to gather container runtime data, including process execution, network flows, and system activities.
-Analyzes normal application behavior, process trees, and network connections to automatically build allow-lists.
-Flags deviations such as unexpected shell spawning, unauthorized package manager execution, or container escapes in real time.
-Responds to active incidents using native controls, such as alerting security teams, terminating compromised pods, or scaling suspicious deployments to zero.
+I am working on a POC for Red Hat Advanced Cluster Security (RHACS) focusing on Kubernetes runtime security and threat detection.
 
-The RHACS is recommended by Red hat to be installed using the operator.
-Need a link between the Central and the New clusters. Init bundle is the older way replaced by the CRS as mentioned below.
+Current understanding
 
+- RHACS provides Kubernetes-native runtime threat detection and behavioral monitoring for active container workloads.
+- The Collector runs as a DaemonSet on each node and collects runtime information such as process execution, network flows, and system activities.
+- RHACS can analyze application behavior, process trees, and network connections to establish expected/normal behavior and identify deviations.
+- It can detect activities such as unexpected shell execution, unauthorized package-manager execution, suspicious network activity, and potential container escape attempts.
+- RHACS can generate alerts and, depending on the configured policies and enforcement mechanisms, take actions such as terminating workloads or applying Kubernetes-native controls.
 
+Cluster registration
 
+As I understand it, RHACS requires a connection between Central and each secured cluster.
 
+For newer RHACS versions, Cluster Registration Secrets (CRSes) are the recommended approach:
 
-Cluster Registration Secrets (CRSes) RECOMMENDED
-Design: Uses a single, lightweight token dedicated only to registering a new cluster.
-Security: Reduces risk because leaked tokens cannot impersonate active services; service-specific certificates are issued by Central only after registration.
-Lifecycle: Fully supported in newer RHACS versions (4.10+) with configurable expiration times and cluster limits.
-Usability: Easier to use across both Operator and Helm installations.
+- Uses a lightweight registration token for onboarding a new cluster.
+- After registration, Central provides the required service-specific credentials/certificates.
+- Provides better security and lifecycle management compared with the older Init Bundle approach.
+- Supported for both Operator- and Helm-based installations.
 
+The Init Bundle is the older approach, where certificates and private keys are pre-generated and provided as a bundle. This has a higher security risk if the bundle is compromised and is deprecated in newer RHACS versions.
 
-Init Bundle
-Design: Contains pre-generated certificates and private keys used to initialize and authenticate secured clusters.
-Security Risk: Carries a higher risk because if the bundle is compromised, the included certificates and keys can impersonate services running on the cluster.
-Lifecycle: Deprecated in modern RHACS releases and scheduled for future removal in favor of CRSes.
+Current environment
 
+The RHACS Operator is already installed in the Pre-prod cluster, and some RHACS components/configuration are already set up.
 
-This operator is already installed in the Pre-prod cluster and few things are also already set up.
+Clarification / Next steps
+
+Could you please confirm the expected next steps for the POC?
+
+In particular, I would like to understand:
+
+1. Is RHACS Central already deployed and configured, and where is it hosted?
+2. Is the Pre-prod cluster already registered as a Secured Cluster with Central?
+3. If not, should I proceed with CRS-based cluster registration?
+4. Which RHACS components are already configured in Pre-prod — Central, Sensor, Admission Controller, and Collector?
+5. What specific runtime security/threat detection scenarios should we demonstrate as part of the POC?
+   - Unexpected shell/process execution
+   - Unauthorized package installation
+   - Suspicious network communication
+   - Privilege escalation
+   - Container escape
+   - Other scenarios recommended by the architecture/security team
+6. Should the POC include only detection and alerting, or should we also demonstrate policy enforcement/response actions?
+7. Are there any existing RHACS security policies or compliance requirements that we should use for the POC?
+
+Once these points are confirmed, I can proceed with the required configuration and prepare the runtime threat-detection scenarios for the POC.If you want, I can also make this more technical and architect-level, with a proposed RHACS POC flow such as Central → Secured Cluster → Sensor → Collector → Runtime Event → Policy → Alert/Enforcement.
