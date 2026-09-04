@@ -1,0 +1,28 @@
+Red Hat Advanced Cluster Security
+
+Red Hat Advanced Cluster Security provides Kubernetes-native runtime threat detection and behavioral monitoring to protect active container workloads. The Collector component runs as a DaemonSet on every node to gather container runtime data, including process execution, network flows, and system activities.
+Analyzes normal application behavior, process trees, and network connections to automatically build allow-lists.
+Flags deviations such as unexpected shell spawning, unauthorized package manager execution, or container escapes in real time.
+Responds to active incidents using native controls, such as alerting security teams, terminating compromised pods, or scaling suspicious deployments to zero.
+
+The RHACS is recommended by Red hat to be installed using the operator.
+Need a link between the Central and the New clusters. Init bundle is the older way replaced by the CRS as mentioned below.
+
+
+
+
+
+Cluster Registration Secrets (CRSes) RECOMMENDED
+Design: Uses a single, lightweight token dedicated only to registering a new cluster.
+Security: Reduces risk because leaked tokens cannot impersonate active services; service-specific certificates are issued by Central only after registration.
+Lifecycle: Fully supported in newer RHACS versions (4.10+) with configurable expiration times and cluster limits.
+Usability: Easier to use across both Operator and Helm installations.
+
+
+Init Bundle
+Design: Contains pre-generated certificates and private keys used to initialize and authenticate secured clusters.
+Security Risk: Carries a higher risk because if the bundle is compromised, the included certificates and keys can impersonate services running on the cluster.
+Lifecycle: Deprecated in modern RHACS releases and scheduled for future removal in favor of CRSes.
+
+
+This operator is already installed in the Pre-prod cluster and few things are also already set up.
