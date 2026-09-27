@@ -1,0 +1,550 @@
+Certificate & Key Management — Final Implementation Plan
+(All Categories)
+Status: Approved design — partially PoC-validated (Section 11)
+Scope: Java Spring Boot 3.5.x microservices only (confirmed — no other stack carries this dependency)
+Secret backend: Plain OpenShift 
+Secret
+ objects for now. No Sealed Secrets, no Vault yet — Vault/CyberArk
+migration is a future phase (Section 10) that will not change the Deployment/mount contract defined here.
+Supersedes: All earlier draft versions of this document, including the Case A/B framing.
+Parent doc: EPay_Master_Architecture_v13.md
+Last updated: 2026-08-12
+1. Four Categories — Final Classification
+# Category Examples Storage Format
+1
+Internal Root CA (Legacy
++ new CMS CA)
+SMS, S3/NetApp, email, JFrog,
+GitLab
+OpenShift cluster
+wide Proxy trust
+PEM, native
+2
+External public certs
+(Case A — no private key)
+NPCI, merchant/bank server
+certs (NBBL etc.)
+Git-managed
+ConfigMap, per
+service
+PEM, native
+3
+mTLS client identity
+(Case B — private key,
+TLS handshake)
+NPCI/IBMB/NBBL client cert
+(WAF-generated CSR, NPCI
+issued)
+OpenShift Secret
+(plain, not in Git)
+PEM (target) /
+PKCS12→JKS
+(fallback only)
+4
+App-level crypto keys
+(not TLS)
+Payload signing/encryption keys
+used directly by 
+sbi_crypto
+OpenShift Secret
+(plain, not in Git)
+Whatever sbi_crypto
+ expects
+Categories 1–2 are non-sensitive (public certs) and stay fully Git-managed. Categories 3–4 hold private key material
+— these move to plain OpenShift Secrets created outside Git, since unencrypted Secret manifests must never be
+committed (Section 6).
+2. epay-helm-charts — Master Chart Context
+Per your V4 Helm architecture: single master chart, empty root 
+values.yaml
+, type-specific defaults in 
+values
+java.yaml
+. All template logic below goes into 
+epay-helm-charts
+ (Platform-team-owned, tagged repo) — never
+duplicated per service. Per-service data (which certs, which Secret names) lives in 
+epay-deployment-config
+(per-service 
+values.yaml
+), consistent with your existing two-repo split.
+2.1 New/modified files in epay-helm-charts
+epay-helm-charts/
+  templates/
+    trusted-ca-configmap.yaml       # NEW — Category 1 opt-in ConfigMap
+deployment.yaml                 # MODIFIED — add volumes/mounts for all 4 categories
+cronjob-cert-expiry.yaml        # NEW — expiry monitoring (Categories 2 & 3)
+configmap-expiry-script.yaml    # NEW — expiry check script
+values.yaml                       # unchanged — stays empty
+values-java.yaml                  # MODIFIED — cert/key defaults for Java services
+values-frontend.yaml              # unchanged (no certs — Java-only scope confirmed)
+2.2 
+templates/trusted-ca-configmap.yaml (Category 1)
+{{- if .Values.trustedCA.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+name: {{ include "epay.fullname" . }}-trusted-ca
+labels:
+config.openshift.io/inject-trusted-cabundle: "true"
+data: {}
+{{- end }}
+2.3 
+templates/deployment.yaml — volumes/mounts, all four categories, fully conditional
+volumes:
+{{- if .Values.trustedCA.enabled }}- name: trusted-ca
+configMap:
+name: {{ include "epay.fullname" . }}-trusted-ca
+items:- {key: ca-bundle.crt, path: tls-ca-bundle.pem}
+{{- end }}
+{{- if .Values.externalTrustCerts.enabled }}- name: external-trust-certs
+configMap:
+name: {{ .Values.externalTrustCerts.configMapName }}
+{{- end }}
+{{- if .Values.npciClientCert.enabled }}- name: npci-client-cert
+secret:
+secretName: {{ .Values.npciClientCert.secretName }}
+{{- end }}
+{{- if .Values.appCryptoKeys.enabled }}- name: app-crypto-keys
+secret:
+secretName: {{ .Values.appCryptoKeys.secretName }}
+{{- end }}
+# ... existing volumes unchanged
+containers:- name: {{ .Chart.Name }}
+volumeMounts:
+{{- if .Values.trustedCA.enabled }}- {name: trusted-ca, mountPath: /etc/pki/ca-trust/extracted/pem, readOnly: true}
+{{- end }}
+{{- if .Values.externalTrustCerts.enabled }}- {name: external-trust-certs, mountPath: /opt/certs/trust, readOnly: true}
+{{- end }}
+{{- if .Values.npciClientCert.enabled }}
+- {name: npci-client-cert, mountPath: /opt/certs/npci, readOnly: true}
+{{- end }}
+{{- if .Values.appCryptoKeys.enabled }}- {name: app-crypto-keys, mountPath: /opt/crypto, readOnly: true}
+{{- end }}
+# ... existing mounts unchanged
+{{- if or .Values.externalTrustCerts.enabled .Values.npciClientCert.enabled }}
+# Reloader triggers pod restart on ConfigMap/Secret content change
+{{- end }}
+template:
+metadata:
+annotations:
+{{- if .Values.externalTrustCerts.enabled }}
+configmap.reloader.stakater.com/reload: "{{ .Values.externalTrustCerts.configMapName 
+}}"
+{{- end }}
+{{- if .Values.npciClientCert.enabled }}
+secret.reloader.stakater.com/reload: "{{ .Values.npciClientCert.secretName }}"
+{{- end }}
+{{- if .Values.appCryptoKeys.enabled }}
+secret.reloader.stakater.com/reload: "{{ .Values.appCryptoKeys.secretName }}"
+{{- end }}
+One template, four independently toggleable capabilities — no per-category chart duplication.
+2.4 
+values-java.yaml — defaults for all Java services
+# Category 1 — Internal Root CA — ON by default for every Java service
+trustedCA:
+enabled: true
+# Category 2 — External bank/NPCI public certs — service opts in + points at its own ConfigMap
+externalTrustCerts:
+enabled: false            # each service turns this on explicitly (Section 4)
+configMapName: ""         # set per-service in epay-deployment-config
+# Category 3 — NPCI/IBMB/NBBL mTLS client identity — service opts in
+npciClientCert:
+enabled: false
+secretName: ""
+# Category 4 — App-level crypto keys — service opts in
+appCryptoKeys:
+enabled: false
+secretName: ""
+Per-service override (
+actually needs:
+epay-deployment-config/<service>/values.yaml 
+) — only the categories that service
+externalTrustCerts:
+enabled: true
+configMapName: payment-svc-trust-certs
+npciClientCert:
+enabled: true
+secretName: payment-svc-npci-client-cert
+3. Category 1 — Internal Root CA (Legacy + CMS)
+Cluster-admin, one-time/rare operation — not part of per-service GitOps flow.
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: sbi-internal-root-ca, namespace: openshift-config}
+data:
+ca-bundle.crt: |-----BEGIN CERTIFICATE----
+... (Legacy Root CA)-----END CERTIFICATE----------BEGIN CERTIFICATE----
+... (New CMS Root CA)-----END CERTIFICATE----
+oc patch proxy/cluster --type=merge -p '{"spec":{"trustedCA":{"name":"sbi-internal-root-ca"}}}'
+Both CAs concatenated — required during the legacy→CMS coexistence window. Confirm with your PKI team
+before ever removing the legacy CA; do it only once every leaf cert it issued has migrated to CMS-issued
+replacements.
+Impact: triggers a cluster-wide rolling node reboot (Machine Config Operator) — schedule as a planned
+maintenance window, dev → preprod → prod, not routine change.
+App wiring:
+spring.ssl.bundle.pem.internal-root.truststore.certificate=file:/etc/pki/ca
+trust/extracted/pem/tls-ca-bundle.pem
+spring.http.client.ssl.bundle=internal-root
+spring.http.reactiveclient.ssl.bundle=internal-root
+Covers SMS, S3/NetApp, email, JFrog, GitLab, and any other internally-signed endpoint automatically once a leaf
+cert chains to either root — no per-service action needed beyond the master chart default (
+trustedCA.enabled:
+true 
+).
+4. Category 2 — External Public Certs (NPCI/Bank/Merchant Server Certs)
+Per-service, Git-managed, unchanged from earlier design.
+epay-deployment-config/<cluster>/<env>/payment-svc/
+configmap-trust-certs.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+name: payment-svc-trust-certs
+namespace: epay-payment
+data:
+trust-bundle.pem: |
+# cert-id: npci-root-ca
+# subject: NPCI Root CA
+# added: 2026-07-15-----BEGIN CERTIFICATE----
+...-----END CERTIFICATE----
+# cert-id: nbbl-server
+# subject: nbbl.gateway.example
+# added: 2026-08-12-----BEGIN CERTIFICATE----
+...-----END CERTIFICATE----
+cert-inventory.yaml: |
+certificates:- cert_id: npci-root-ca
+subject_cn: "NPCI Root CA"
+purpose: "UPI switch root trust"
+added_by: "vishnu"
+added_date: "2026-07-15"
+source: "NPCI onboarding email dated 2026-07-10"- cert_id: nbbl-server
+subject_cn: "nbbl.gateway.example"
+purpose: "NBBL channel TLS"
+added_by: "vishnu"
+added_date: "2026-08-12"
+source: "NBBL integration team"
+Service enablement (
+epay-deployment-config/<service>/values.yaml 
+):
+externalTrustCerts:
+enabled: true
+configMapName: payment-svc-trust-certs
+App wiring:
+spring.ssl.bundle.pem.bank.truststore.certificate=file:/opt/certs/trust/trust-bundle.pem
+spring.http.client.ssl.bundle=bank
+spring.http.reactiveclient.ssl.bundle=bank
+For vendor SDKs bypassing Spring auto-config (AWS SDK v2 → NetApp, if a leaf cert isn't already covered by
+Category 1): Tier 2 wiring, 
+TlsTrustManagersProvider
+ fed from 
+sslBundles.getBundle("bank") 
+, as established
+in the NetApp 
+S3Client
+ example.
+CI gate (
+validate-bundle.sh 
+) unchanged — blocks MR if 
+sets mismatch.
+trust-bundle.pem
+ and 
+5. Category 3 — NPCI/IBMB/NBBL mTLS Client Identity
+5.1 Target flow — PEM directly, no PKCS12/JKS conversion
+cert-inventory.yaml
+ cert-id
+Precondition to verify first: confirm the NPCI outbound call is made via Spring's auto-configured
+WebClient 
+/
+RestClient
+ (same diagnostic used for report-service). If yes, this eliminates the PKCS12→JKS step
+entirely.
+Create the Secret directly in-cluster (no Sealed Secrets, no Git):
+oc create secret tls payment-svc-npci-client-cert \--cert=npci-client.crt \--key=npci-client.key \-n epay-payment
+Repeat independently per cluster (prod-dc, prod-dr — plain Secrets are cluster-local, no cross-cluster sync).
+Service enablement:
+npciClientCert:
+enabled: true
+secretName: payment-svc-npci-client-cert
+App wiring:
+spring.ssl.bundle.pem.npci.keystore.certificate=file:/opt/certs/npci/tls.crt
+spring.ssl.bundle.pem.npci.keystore.private-key=file:/opt/certs/npci/tls.key
+spring.ssl.bundle.pem.npci.truststore.certificate=file:/opt/certs/trust/trust-bundle.pem
+@Bean
+public WebClient npciWebClient(WebClient.Builder builder, WebClientSsl ssl) {
+return builder.apply(ssl.fromBundle("npci")).build();
+}
+5.2 Fallback flow — only if the NPCI client has no Spring/trust-hook integration point
+If the current WAF-CSR → PKCS12 → JKS process is driven by legacy code with no injection point:
+initContainers:- name: npci-keystore-build
+image: epay-jf
+command: ["/bin/sh", "-c"]
+args:- openssl pkcs12 -export -in /opt/certs/npci/tls.crt -inkey /opt/certs/npci/tls.key-out /keystore/npci-keystore.p12 -password pass:$(KEYSTORE_PASSWORD)
+volumeMounts:- {name: npci-client-cert, mountPath: /opt/certs/npci}- {name: npci-keystore-vol, mountPath: /keystore}
+env:- name: JAVA_TOOL_OPTIONS
+value: "-Djavax.net.ssl.keyStore=/keystore/npci-keystore.p12 
+Djavax.net.ssl.keyStoreType=PKCS12 -Djavax.net.ssl.keyStorePassword=$(KEYSTORE_PASSWORD)"
+Even in the fallback, the source private key still comes from an OpenShift Secret, not a Dockerfile — rotation
+still avoids an image rebuild; only the runtime conversion step (not the storage/build dependency) is retained.
+Do not add the private key to a truststore. Category 3's Secret contains 
+tls.crt +
+tls.key
+ (identity) — never
+merge with Category 2's public-cert-only ConfigMap.
+6. Category 4 — App-Level Crypto Keys (Not TLS)
+No SSL Bundle, no 
+WebClientSsl 
+, no TrustManager/KeyManager wiring — these are consumed directly by
+application code (
+sbi_crypto 
+), never touch a TLS handshake.
+oc create secret generic payment-svc-crypto-keys \--from-file=signing.key=signing-private.key \--from-file=signing.crt=signing-cert.crt \-n epay-payment
+appCryptoKeys:
+enabled: true
+secretName: payment-svc-crypto-keys
+sbi.crypto.private-key.path=/opt/crypto/signing.key
+sbi.crypto.certificate.path=/opt/crypto/signing.crt
+Repoint 
+sbi_crypto 
+'s existing config at this mount path — no change to the jar's loading logic itself, just the source
+location moving off the Dockerfile.
+7
+. Secret Provisioning Without Sealed Secrets — Operational Process
+Since Categories 3–4 hold private key material and Sealed Secrets is explicitly out of scope for now, plain 
+Secret
+creation must happen outside the Git-tracked deployment-repo flow — Secret YAML is only base64, never
+commit it, encrypted or not.
+7
+.1 Provisioning procedure (interim, until Vault)
+1. Cert/key received from NPCI/CA out-of-band (secure channel per existing process).
+2. Platform team (or designated Release Manager, per your no-Owner-role RBAC model) runs 
+/ 
+oc apply -f
+directly against each cluster — not via ArgoCD sync.
+oc create secret
+3. Log the change in your existing change-management/ticketing process (cert alias, cluster, date, requestor) —
+this becomes your audit trail in place of Git history, required for PCI-DSS Req 10.5.1 evidence.
+4. Repeat independently per cluster (dev, preprod-dc, preprod-dr, prod-dc, prod-dr) — no automatic propagation
+between clusters for Secrets, unlike the ConfigMap-based categories.
+7
+.2 Keep ArgoCD from fighting the Secret
+Since the Secret is created out-of-band, exclude it from ArgoCD's managed-resource diffing to avoid drift alerts or
+accidental pruning:
+# Application manifest, or via annotation on the Secret itself
+metadata:
+annotations:
+argocd.argoproj.io/compare-options: IgnoreExtraneous
+Or scope the ArgoCD 
+Application 
+'s resource inclusion to exclude 
+kind: Secret
+ for the relevant path entirely, if
+your Application definitions support a path-level exclusion — confirm against your current ArgoCD app-of-apps
+structure before rollout.
+7
+.3 Rotation
+Same 
+oc create secret ... --dry-run=client -o yaml | oc apply -f 
+ pattern, re-run per cluster →
+Reloader (already watching the Secret name via the master chart's 
+secret.reloader.stakater.com/reload
+annotation) triggers pod restart automatically. No image rebuild, no Git commit, no ArgoCD sync — the one
+deliberate gap versus Categories 1–2, accepted as the interim state.
+8. Expiry Monitoring — Extended to Cover Categories 2 & 3
+Same CronJob pattern as before, now also checking the NPCI client cert:
+#!/bin/sh
+set -e
+WARN_DAYS=30
+NOW=$(date +%s)
+check_one() {
+cert_file=$1; label_type=$2; cert_id=$3
+cn=$(openssl x509 -in "$cert_file" -noout -subject 2>/dev/null | sed -n 's/.*CN *= *\
+([^,\/]*\).*/\1/p')
+exp=$(openssl x509 -in "$cert_file" -noout -enddate | cut -d= -f2)
+exp_epoch=$(date -d "$exp" +%s)
+days_left=$(( (exp_epoch - NOW) / 86400 ))
+echo "cert_expiry_days{service=\"payment
+svc\",type=\"$label_type\",cert_id=\"$cert_id\",cn=\"$cn\"} $days_left" >> /metrics/expiry.prom
+[ "$days_left" -lt "$WARN_DAYS" ] && echo "ALERT: [$label_type:$cert_id] $cn expires in 
+$days_left days"
+}
+# Category 2 — split bundle, check each
+awk '/^# cert-id:/{id=$0; sub("# cert-id: ","",id)} /-----BEGIN CERTIFICATE-----/{n++; 
+ids[n]=id} {print > ("/tmp/cert-" n ".pem")}' /opt/certs/trust/trust-bundle.pem
+i=1
+for f in /tmp/cert-*.pem; do [ -s "$f" ] || continue; check_one "$f" "trust" "${ids[$i]:
+unknown}"; i=$((i+1)); done
+# Category 3 — NPCI client cert
+[ -f /opt/certs/npci/tls.crt ] && check_one /opt/certs/npci/tls.crt "npci-client" "npci-client
+cert"
+curl --data-binary @/metrics/expiry.prom 
+"http://pushgateway.monitoring.svc:9091/metrics/job/cert-expiry/instance/payment-svc"
+Category 1 (internal root) expiry is OpenShift/Machine-Config-Operator's own concern at the node level — not
+tracked by this per-service CronJob; confirm with the platform/PKI team whether a separate cluster-level expiry
+check exists for 
+openshift-config
+ CAs. Category 4 (app crypto keys) — add if those keys have a defined validity
+window; flag to security team if rotation cadence isn't already defined.
+9. Operational Workflow Summary
+Category
+Add/rotate action
+Trigger
+1. Internal Root
+CA
+2. External public
+certs
+oc edit
+ ConfigMap in 
+openshift-config 
+,
+re-patch proxy if new root
+Edit 
+trust-bundle.pem
+ + 
+cert
+Cluster-admin, rare
+Image rebuild?
+No (node reboot
+instead)
+inventory.yaml 
+, MR, merge
+3. NPCI mTLS
+client cert
+4. App crypto
+keys
+oc create secret
+ per cluster, log in change
+ticket
+oc create secret
+ per cluster, log in change
+ticket
+Git commit → ArgoCD
+sync → Reloader
+Manual, per cluster →
+Reloader
+No
+No
+Manual, per cluster →
+Reloader
+10. Future — Vault/CyberArk Migration (Not in Current Scope)
+No
+When Vault/CyberArk becomes available, Categories 3–4 migrate to External Secrets Operator (ESO):
+Vault/CyberArk → ESO → K8s Secret (same name, same mount path)
+No change to the master chart, Deployment template, or app-level 
+application.properties wiring — the
+Secret
+ object's name and keys stay identical; only how it's populated changes (ESO-synced instead of 
+secret 
+). This is the reason Categories 3–4 were deliberately designed around standard 
+oc create
+Secret
+ objects now rather
+than a Sealed-Secrets-specific format — it keeps this migration a backend swap, not a re-architecture.
+11. PoC Validation Status
+Item
+Spring PEM parser tolerates 
+#
+ comment lines in
+multi-cert bundle
+spring.http.reactiveclient.ssl.bundle
+ /
+spring.http.client.ssl.bundle
+ exist, apply
+automatically
+WebClientSsl
+ per-bundle wiring
+AWS SDK v2 
+TlsTrustManagersProvider
+ hook
+JDK 21 has no native PEM truststore support (Tier 3
+requires JKS)
+OpenShift 
+config.openshift.io/inject
+Status
+Validated
+Validated
+against
+source
+Validated
+against
+source
+Validated
+against
+source/docs
+Validated
+trusted-cabundle
+ mechanism
+Validated
+against Red
+Evidence
+Actual 
+PemCertificateParser
+ source
+compiled/run against test bundle —
+Section carried from earlier doc.
+Confirmed at Spring Boot tag 
+v3.5.16
+— matches your pinned 3.5.8.
+@since 3.1.0 
+.
+Confirmed via
+ApacheHttpClient.Builder 
+.
+JEP 470 (JDK 25 preview only), JEP 229.
+Confirmed label, ConfigMap behavior,
+ca-bundle.crt
+ key, PEM format.
+Item Status Evidence
+Hat docs
+cert-manager Operator for OpenShift + trust
+manager operand availability
+Validated
+against Red
+Hat docs
+GA operator; trust-manager operand is
+Technology Preview as of v1.19.4 — not
+used in this final design, noted for future
+reference only.
+Full Spring context, live NPCI/bank mTLS handshake
+using this design
+Not yet tested Requires dev cluster deployment.
+Category 1 leaf-cert elimination check (does
+NetApp/SMS/etc. actually chain to internal root)
+Not yet tested
+Run 
+openssl x509 -noout -issuer
+against each Category-1-candidate
+endpoint before removing any leaf from
+Category 2 bundles.
+ArgoCD exclusion behavior for out-of-band Secrets Not yet tested
+Confirm 
+compare-options
+/path
+exclusion approach against your actual
+Application manifests.
+oc create secret
+ + Reloader restart timing, per
+cluster
+Not yet tested Dev cluster validation required.
+12. Remaining Steps Before Canonicalization in
+EPay_Master_Architecture_v13.md
+1. Confirm NPCI outbound call construction (
+WebClient
+/
+RestClient
+ vs. legacy) — determines whether
+Category 3 uses Tier 1 (PEM) or Tier 3 (JKS fallback).
+2. Run the leaf-cert elimination check for Category 1 candidates (NetApp, SMS, email, JFrog, GitLab) — reduces
+Category 2 bundle size wherever applicable.
+3. Deploy master chart changes to one dev service, confirm all four 
+Values-gated volume/mount blocks render
+correctly and independently.
+4. Validate ArgoCD non-interference with out-of-band 
+Secret
+ objects.
+5. Confirm Reloader fires correctly on 
+oc create secret --dry-run=client -o yaml | oc apply -f 
+ re
+application (same Secret name, updated data).
+6. Schedule and execute the Category 1 root CA proxy patch as a planned maintenance window, dev → preprod →
+prod, with legacy+CMS coexistence confirmed before any future legacy CA removal.
+Once these pass, this document graduates from "PoC-validated design" to canonical pattern in EPay_Master_Architecture_v13.md
+, superseding all cert/key handling sections currently referencing the
+Dockerfile-baked approach.
