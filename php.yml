@@ -1,0 +1,241 @@
+# ci/build/php.yml  |  Stage: build
+# PHP microservice build with Composer
+#
+# ── Dependency resolution — JFrog Composer virtual repository ────────────────
+# Repository: https://artifactory.jfrog.sbi/artifactory/api/composer/itepaypg-sbiepay2-php-virtual
+# Auth: JF_USER + JF_TOKEN (HTTP basic via Composer global config)
+# SSL: SBI internal CA extracted from JFrog TLS handshake at runtime,
+#      merged with system CA bundle, passed to Composer via cafile config
+#
+# ── Composer PHAR ─────────────────────────────────────────────────────────────
+# ubi9/php-82 does not include Composer. PHAR is downloaded from JFrog at runtime.
+# composer.phar is served via the JFrog PHP virtual repo (devsecops-composer-remote proxy).
+# Path: https://artifactory.jfrog.sbi/artifactory/itepaypg-sbiepay2-php-virtual/composer.phar
+#
+# ── Cache ─────────────────────────────────────────────────────────────────────
+# vendor/          NOT cached — resolved fresh from composer.lock each run
+# .composer-cache/ CACHED — Composer package tarballs (COMPOSER_CACHE_DIR)
+#
+# ── App repo requirements ─────────────────────────────────────────────────────
+# composer.json — dependency declarations
+# composer.lock — locked versions (must be committed to repo)
+#
+# ── GitLab CI Variables required ─────────────────────────────────────────────
+# JF_USER  — Artifactory username (e.g. v1021495)
+# JF_TOKEN — Artifactory API key (generated from Artifactory UI → Edit Profile)
+
+###########################################
+# .build:
+#   stage: build
+
+#   image: artifactory.jfrog.sbi:443/itepaypg-sbiepay2-docker-virtual/ubi9/php-82:1-1778488703
+
+#   before_script:
+#     - git config --global --add safe.directory "${CI_PROJECT_DIR}"
+#     - php --version
+
+#   script:
+#     - |
+#       set -euo pipefail
+
+#       echo "===== VERIFYING DEPENDENCIES ====="
+
+#       ls -la vendor/
+#       test -f vendor/autoload.php
+
+#       # echo "===== BUILD STARTED ====="
+
+#       # php build.php prod
+
+#   artifacts:
+#     expire_in: 1 day
+
+#     paths:
+#       - vendor/
+#       - composer.lock
+####################################################
+
+# .build:
+#   stage: build
+
+#   image: artifactory.jfrog.sbi:443/itepaypg-sbiepay2-docker-virtual/ubi9/php-82:1-1778488703
+
+#   tags:
+#     - common_runner
+
+#   variables:
+#     COMPOSER_HOME: "${CI_PROJECT_DIR}/.composer"
+#     COMPOSER_CACHE_DIR: "${CI_PROJECT_DIR}/.composer-cache"
+#     SSL_CERT_FILE: "${JF_ARTIFACTORY_CERT}"
+#     CURL_CA_BUNDLE: "${JF_ARTIFACTORY_CERT}"
+
+#   cache:
+#     key: "${CI_PROJECT_NAME}-composer-${CI_COMMIT_REF_SLUG}"
+#     paths:
+#       - .composer-cache/
+
+#   before_script:
+#     - php --version
+
+#     - |
+#       echo "===== Validating JF_ARTIFACTORY_CERT ====="
+
+#       if [ -z "$JF_ARTIFACTORY_CERT" ] || [ ! -f "$JF_ARTIFACTORY_CERT" ]; then
+#         echo "ERROR: JF_ARTIFACTORY_CERT is missing"
+#         exit 1
+#       fi
+
+#     - |
+#       echo "===== Downloading Composer ====="
+
+#       curl --fail --cacert "$JF_ARTIFACTORY_CERT" \
+#         -u "$JF_USER:$JF_TOKEN" \
+#         -o composer.phar \
+#         https://artifactory.jfrog.sbi/artifactory/itepaypg-sbiepay2-php-virtual/composer.phar
+
+#       chmod +x composer.phar
+
+#       php composer.phar --version
+
+#     - |
+#       echo "===== Configuring Composer ====="
+
+#       php composer.phar config --global cache-dir "$COMPOSER_CACHE_DIR"
+
+#       php composer.phar config --global cafile "$JF_ARTIFACTORY_CERT"
+
+#       php composer.phar config --global \
+#         repositories.jfrog composer \
+#         https://artifactory.jfrog.sbi/artifactory/api/composer/itepaypg-sbiepay2-php-virtual
+
+#       php composer.phar config --global \
+#         http-basic.artifactory.jfrog.sbi \
+#         "$JF_USER" "$JF_TOKEN"
+
+#   script:
+#     - |
+#       set -eo pipefail
+
+#       echo "===== Installing Dependencies ====="
+
+#       php composer.phar install \
+#         --no-dev \
+#         --prefer-dist \
+#         --no-interaction \
+#         --optimize-autoloader
+
+#       echo "===== Validate ====="
+
+#       test -f vendor/autoload.php
+#       ls -lah vendor/
+
+#   artifacts:
+#     paths:
+#       - vendor/
+#       - composer.lock
+
+#     expire_in: 1 day
+
+
+stages:
+  - build
+
+.build:
+  stage: build
+
+  image: artifactory.jfrog.sbi:443/itepaypg-sbiepay2-docker-virtual/ubi9/php-82:1-1778488703
+
+  tags:
+    - common_runner
+
+  variables:
+    COMPOSER_HOME: "${CI_PROJECT_DIR}/.composer"
+    COMPOSER_CACHE_DIR: "${CI_PROJECT_DIR}/.composer-cache"
+    COMPOSER_NO_INTERACTION: "1"
+    COMPOSER_ROOT_VERSION: "1.0.0"
+    SSL_CERT_FILE: "${JF_ARTIFACTORY_CERT}"
+    CURL_CA_BUNDLE: "${JF_ARTIFACTORY_CERT}"
+    JF_HOST: "artifactory.jfrog.sbi"
+    JF_COMPOSER_REPO: "itepaypg-sbiepay2-php-virtual"
+
+  cache:
+    key: "${CI_PROJECT_NAME}-composer-${CI_COMMIT_REF_SLUG}"
+    paths:
+      - .composer-cache/
+
+  before_script:
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
+    - php --version
+
+    - |
+      echo "===== Validating JF_ARTIFACTORY_CERT ====="
+      if [ -z "$JF_ARTIFACTORY_CERT" ] || [ ! -f "$JF_ARTIFACTORY_CERT" ]; then
+        echo "ERROR: JF_ARTIFACTORY_CERT is missing"
+        exit 1
+      fi
+
+    - |
+      echo "===== Downloading Composer ====="
+      curl --fail --cacert "$JF_ARTIFACTORY_CERT" \
+        -u "$JF_USER:$JF_TOKEN" \
+        -o composer.phar \
+        "https://${JF_HOST}/artifactory/${JF_COMPOSER_REPO}/composer.phar"
+      chmod +x composer.phar
+      php composer.phar --version
+
+    - |
+      echo "===== Configuring Composer ====="
+      php composer.phar config --global cache-dir "$COMPOSER_CACHE_DIR"
+      php composer.phar config --global cafile "$JF_ARTIFACTORY_CERT"
+
+      php composer.phar config --global \
+        repositories.jfrog composer \
+        "https://${JF_HOST}/artifactory/api/composer/${JF_COMPOSER_REPO}"
+
+      php composer.phar config --global repositories.packagist.org false
+
+      php composer.phar config --global "http-basic.${JF_HOST}"     "$JF_USER" "$JF_TOKEN"
+      php composer.phar config --global "http-basic.${JF_HOST}:443" "$JF_USER" "$JF_TOKEN"
+
+    - |
+      echo "===== Artifactory checks ====="
+      curl -s -o /dev/null -w "Metadata          HTTP %{http_code}\n" --cacert "$JF_ARTIFACTORY_CERT" \
+        -u "$JF_USER:$JF_TOKEN" \
+        "https://${JF_HOST}:443/artifactory/api/composer/${JF_COMPOSER_REPO}/p2/vlucas/phpdotenv.json"
+      curl -s -o /dev/null -w "Dist download     HTTP %{http_code}\n" --cacert "$JF_ARTIFACTORY_CERT" \
+        -u "$JF_USER:$JF_TOKEN" \
+        "https://${JF_HOST}:443/artifactory/api/composer/${JF_COMPOSER_REPO}/vcs-dists/zip/guzzle/psr7/95e7828100de18b4e269fb1703be530082d5166d"
+
+  script:
+    - |
+      set -eo pipefail
+
+      echo "===== Checking composer.lock sources ====="
+      JFROG_COUNT=$(grep -c "${JF_HOST}" composer.lock || true)
+      echo "Artifactory URLs: ${JFROG_COUNT}"
+      if [ "$JFROG_COUNT" -eq 0 ]; then
+        echo "ERROR: composer.lock does not point to Artifactory. Commit the regenerated composer.lock."
+        exit 1
+      fi
+
+      echo "===== Installing Dependencies ====="
+      php composer.phar install \
+        --no-dev \
+        --prefer-dist \
+        --no-source-fallback \
+        --no-interaction \
+        --optimize-autoloader
+
+      echo "===== Validate ====="
+      test -f vendor/autoload.php
+      ls -lah vendor/
+
+  artifacts:
+    paths:
+      - vendor/
+      - composer.lock
+    expire_in: 1 day
+
+
+build:
+  extends: .build
