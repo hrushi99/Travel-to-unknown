@@ -1,10 +1,20 @@
-[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.10.1:compile (default-compile) on project SBIePAYMIFDesing: Fatal error compiling: invalid flag: --release -> [Help 1]
-[ERROR] 
-[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
-[ERROR] Re-run Maven using the -X switch to enable full debug logging.
-[ERROR] 
-[ERROR] For more information about the errors and possible solutions, please read the following articles:
-[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException
-Cleaning up project directory and file based variables
-00:01
-ERROR: Job failed: exit code 1
+<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.5.8</version>
+		
+	</parent>
+	<groupId>com.sbiepay</groupId>
+	<artifactId>SBIePAYMIFDesing</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<packaging>war</packaging>
+	<name>SBIePAYMIFDesing</name>
+	<description>Demo project for Spring Boot</description>
+	<properties>
+		<java.version>21</java.version>
+		<hibernate-validator.version>6.0.0.Final</hibernate-validator.version>
+		<validation-api.version>2.0.1.Final</validation-api.version>
+		<spring.boot.version>3.5.8</spring.boot.version>
+	</properties>
+
+openjdk/openjdk-8-rhel8:latest
